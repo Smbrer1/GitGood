@@ -3,10 +3,10 @@ package main
 import "path/filepath"
 
 type Repo struct {
-	Folder    string
-	Name      string
-	Tags      []string
-	Favourite bool
+	Folder    string   `json:"folder"`
+	Name      string   `json:"name"`
+	Tags      []string `json:"tags"`
+	Favourite bool     `json:"favourite"`
 }
 
 // Path returns the path <folder>/<repoName>

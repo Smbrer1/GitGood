@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -15,12 +17,12 @@ Nap is a code snippet manager for your terminal.
 github.com/Smbrer1/GitGood
 
 Usage:
-  nap           - for interactive mode
-  nap list      - list all snippets
-  nap <snippet> - print snippet to stdout
+  ggd           - for interactive mode
+  ggd list      - list all snippets
+	ggd repo		  - change cwd to repo path
 
 Create:
-  nap < main.go                 - save snippet from stdin
+  ggd < main.go                 - save snippet from stdin
   nap example/main.go < main.go - save snippet with name`)
 
 func main() {
@@ -30,18 +32,23 @@ func main() {
 func runCLI(args []string) {
 	config := readConfig()
 	repos := readRepos(config)
-	_ = repos
 	_ = config
-
 	if len(args) > 0 {
 		switch args[0] {
 		case "list":
-			listSnippets(snippets)
+			listRepos(repos)
 		case "-h", "--help":
 			fmt.Println(helpText)
+		case "add":
+			if len(args) == 1 {
+				fmt.Println("Please add path to repo")
+				return
+			}
+			saveRepo(args[1], config, repos)
 		default:
-			snippet := findSnippet(args[0], snippets)
-			fmt.Print(snippet.Content(isatty.IsTerminal(os.Stdout.Fd())))
+			fmt.Println("default")
+			// snippet := findSnippet(args[0], repos)
+			// fmt.Print(snippet.Content(isatty.IsTerminal(os.Stdout.Fd())))
 		}
 		return
 	}
@@ -101,29 +108,81 @@ func readRepos(config Config) []Repo {
 	return repos
 }
 
-func saveRepo(content string, args []string, config Config, repos []Repo) {
-	// folder, name, language := parseName(name)
-	// file := fmt.Sprintf("%s.%s", name, language)
-	// filePath := filepath.Join(config.Home, folder, file)
-	// if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-	// 	fmt.Println("unable to create folder")
-	// 	return
-	// }
-	// err := os.WriteFile(filePath, []byte(content), 0o644)
-	// if err != nil {
-	// 	fmt.Println("unable to create snippet")
-	// 	return
-	// }
-	//
-	// // Add snippet metadata
-	// snippet := Snippet{
-	// 	Folder:   folder,
-	// 	Date:     time.Now(),
-	// 	Name:     name,
-	// 	File:     file,
-	// 	Language: language,
-	// }
-	//
-	// snippets = append([]Snippet{snippet}, snippets...)
-	// writeSnippets(config, snippets)
+func listRepos(repos []Repo) {
+	for _, repo := range repos {
+		fmt.Printf("Path: %s\nName: %s, Tags: %v, Favourite: %v\n", repo.Folder, repo.Name, repo.Tags, repo.Favourite)
+	}
+}
+
+func saveRepo(repoPath string, config Config, repos []Repo) {
+	fullPath, name, err := parseRepo(repoPath)
+	if err != nil {
+		fmt.Printf("Unable to save repo, %+v", err)
+		return
+	}
+
+	for _, repo := range repos {
+		if fullPath == repo.Folder {
+			fmt.Println("You already saved that repo")
+			return
+		}
+	}
+
+	// Add snippet metadata
+	repo := Repo{
+		Folder: fullPath,
+		Name:   name,
+	}
+
+	repos = append([]Repo{repo}, repos...)
+	writeRepo(config, repos)
+}
+
+func parseRepo(path string) (string, string, error) {
+	switch path {
+	case ".":
+		repoPath, err := os.Getwd()
+		if err != nil {
+			return "", "", err
+		}
+		ok, err := checkIfRepo(repoPath)
+		if err != nil {
+			return "", "", err
+		}
+		sPath := strings.Split(repoPath, "/")
+		if ok {
+			return repoPath, sPath[len(sPath)-1], nil
+		} else {
+			return "", "", errors.New("not a git repo")
+		}
+	default:
+		return "haha", "hehe", nil
+	}
+}
+
+func checkIfRepo(path string) (bool, error) {
+	gitCommmand := exec.Command("git", "-C", path, "rev-parse")
+
+	_, err := gitCommmand.Output()
+	if err != nil {
+		print(err.Error())
+		if err.Error() == "exit status 128" {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
+}
+
+func writeRepo(config Config, repos []Repo) {
+	b, err := json.Marshal(repos)
+	if err != nil {
+		fmt.Println("Could not marshal latest repo data.", err)
+		return
+	}
+
+	if err := os.WriteFile(filepath.Join(config.Home, config.File), b, os.ModePerm); err != nil {
+		fmt.Println("Could not save repo file.", err)
+	}
 }
