@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 var helpText = strings.TrimSpace(`
@@ -46,12 +47,34 @@ func runCLI(args []string) {
 			}
 			saveRepo(args[1], config, repos)
 		default:
-			fmt.Println("default")
-			// snippet := findSnippet(args[0], repos)
-			// fmt.Print(snippet.Content(isatty.IsTerminal(os.Stdout.Fd())))
+			repoArgs := args[1:]
+			repoName := args[0]
+			for _, repo := range repos {
+				if repoName == repo.Name {
+					if len(repoArgs) == 0 {
+						fmt.Println("trying to cd")
+						err := syscall.Chdir(repo.Folder)
+						// move := exec.Command("cd", repo.Folder)
+						// err := move.Run()
+						if err != nil {
+							fmt.Println("error", err)
+							return
+						}
+
+						return
+					}
+					repoActions(repoName, repoArgs)
+					return
+				}
+			}
+			fmt.Println("You didn't save a repo with that name")
 		}
 		return
 	}
+}
+
+func repoActions(repo string, args []string) {
+	fmt.Println("Repo Action")
 }
 
 // readStdin returns the stdin that is piped in to the command line interface.
